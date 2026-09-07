@@ -1,0 +1,68 @@
+name: TAG released version after merge and delete source branch
+
+on:
+  pull_request:
+    types:
+      - closed
+    branches:
+      - main
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  tag-main:
+    if: ${{ github.event.pull_request.merged == true && (startsWith(github.event.pull_request.head.ref, 'sync/release/') || startsWith(github.event.pull_request.head.ref, 'sync/hotfix/')) }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Debug raw PR body
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          set -x
+          echo "Length: ${#PR_BODY}"
+          printf '%s\n' "$PR_BODY"
+
+      - name: Validate PR body
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          if [ -z "$PR_BODY" ]; then
+            echo "::error title=Missing PR body::Pull request body is empty"
+            exit 1
+          fi
+
+      - name: Extract metadata from PR body
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: bash .github/workflows/scripts/extract_metadata_from_pr_body.sh
+
+      - name: Debug extracted tag
+        run: |
+          echo "TAG='${{ env.TAG }}'"
+          printf '%q\n' "${{ env.TAG }}"          
+
+      - name: Create tag on main if same already does not exist
+        env:
+          TAG: ${{ env.TAG }}
+        run: bash .github/workflows/scripts/create_tag.sh
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ env.TAG }}
+          RELEASE_NOTES: ${{ env.RELEASE_NOTES }}
+        run: bash .github/workflows/scripts/create_release.sh
+
+      - name: Delete merged source branch and matching process branch if no open PRs remain
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SYNC_BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: bash .github/workflows/scripts/delete_merged_sync_and_process_branches.sh

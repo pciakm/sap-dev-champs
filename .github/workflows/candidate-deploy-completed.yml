@@ -1,0 +1,98 @@
+name: Release | Hotfix deploy completed
+
+on:
+  repository_dispatch:
+    types: [ctms-imported]
+  workflow_dispatch:
+    inputs:
+      sys:
+        description: Target system
+        required: true
+        default: BPA_CF_PRD
+      trqs:
+        description: Transport ids joined by dash, e.q. TR1-TR2
+        required: false
+      source_branch:
+        description: Optional source branch override for testing
+        required: false
+        default: ""
+      app_type:
+        description: Application type
+        required: false
+        default: application
+      email:
+        description: User email
+        required: false
+        default: test@knauf.com
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  candidate-merge:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.client_payload.app-type == 'application' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check GitHub CLI
+        run: gh --version
+
+      - name: Show CTMS payload
+        run: echo "client_payload=${{ toJSON(github.event.client_payload) }}"
+
+      - name: Set TRQS var
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            SYS="${{ github.event.inputs.sys }}"
+            TRQS="${{ github.event.inputs.trqs }}"
+            EMAIL="${{ github.event.inputs.email }}"
+            SOURCE_BRANCH_INPUT="${{ github.event.inputs.source_branch }}"
+          else
+            SYS=$(echo '${{ github.event.client_payload.system-id }}')
+            TRQS=$(echo '${{ github.event.client_payload.transport-ids }}' | jq -r 'join("-")')
+            EMAIL=$(echo '${{ toJSON(github.event.client_payload) }}' | jq -r '.body' | jq -r '.user')
+            SOURCE_BRANCH_INPUT=""
+          fi
+
+          echo "SYS=$SYS"
+          echo "TRQS=$TRQS"
+          echo "EMAIL=$EMAIL"
+          echo "SOURCE_BRANCH_INPUT=$SOURCE_BRANCH_INPUT"
+
+          echo "SYS=$SYS" >> "$GITHUB_ENV"
+          echo "TRQS=$TRQS" >> "$GITHUB_ENV"
+          echo "EMAIL=$EMAIL" >> "$GITHUB_ENV"
+          echo "SOURCE_BRANCH_INPUT=$SOURCE_BRANCH_INPUT" >> "$GITHUB_ENV"
+
+      - name: Resolve source branch from transport tag metadata
+        if: ${{ env.SYS == 'BPA_CF_PRD' && env.TRQS != '' && env.SOURCE_BRANCH_INPUT == '' }}
+        id: resolve_source_branch
+        run: bash .github/workflows/scripts/resolve_source_branch_from_ctms_tag.sh
+
+      - name: Set effective source branch
+        id: effective_source_branch
+        if: ${{ env.SYS == 'BPA_CF_PRD' && env.TRQS != '' }}        
+        run: |
+          if [ -n "${{ env.SOURCE_BRANCH_INPUT }}" ]; then
+            SOURCE_BRANCH="${{ env.SOURCE_BRANCH_INPUT }}"
+          else
+            SOURCE_BRANCH="${{ steps.resolve_source_branch.outputs.source_branch }}"
+          fi
+          echo "::notice title=Source branch::Effective source branch is ${SOURCE_BRANCH}"
+          echo "SOURCE_BRANCH=$SOURCE_BRANCH" >> "$GITHUB_ENV"
+          echo "source_branch=$SOURCE_BRANCH" >> "$GITHUB_OUTPUT"
+
+      - name: Create sync PRs after CTMS import to PRD
+        if: ${{ env.SYS == 'BPA_CF_PRD' && env.TRQS != '' && steps.resolve_source_branch.outputs.source_branch != '' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TRQS: ${{ env.TRQS }}
+          SOURCE_BRANCH: ${{ steps.resolve_source_branch.outputs.source_branch }}
+          SOURCE_TAG: ${{ steps.resolve_source_branch.outputs.source_tag }}
+          SOURCE_SHA: ${{ steps.resolve_source_branch.outputs.source_sha }}
+        run: bash .github/workflows/scripts/create_candidate_sync_prs_if_needed.sh
