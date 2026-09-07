@@ -1,0 +1,120 @@
+name: Release | Hotfix candidate deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch_type:
+        description: Branch type
+        required: true
+        type: choice
+        options:
+          - release
+          - hotfix
+
+      candidate_tag:
+        description: 'Candidate tag to build from and export to CTMS. Format: vX.Y.Z-rcN for release, vX.Y.Z-hcN for hotfix. If empty, the last tag for the active branch version will be used.'
+        required: false
+        type: string        
+           
+permissions:
+  contents: write
+  packages: read
+
+env:
+  NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:        
+  ctms-export:
+    runs-on: ubuntu-latest    
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Validate candidate tag    
+      env:
+        BRANCH_TYPE: ${{ github.event.inputs.branch_type }}
+        CANDIDATE_TAG: ${{ github.event.inputs.candidate_tag }}
+      run: bash .github/workflows/scripts/validate_candidate_tag_format.sh 
+
+# Although tags are global, to avoid build based on old tags,
+# we search for latest branch version and then identify its (version's) latest tag
+
+    - name: Resolve active branch of type ${{ github.event.inputs.branch_type }}
+      id: branch
+      env:
+        BRANCH_TYPE: ${{ github.event.inputs.branch_type }}
+      run: bash .github/workflows/scripts/resolve_active_branch.sh
+
+    - name: Resolve candidate tag
+      id: ct
+      env:
+        CANDIDATE_TAG: ${{ github.event.inputs.candidate_tag }}
+        BRANCH_TYPE: ${{ github.event.inputs.branch_type }}
+        VERSION: ${{ steps.branch.outputs.version }}
+      run: bash .github/workflows/scripts/resolve_candidate_tag.sh
+
+    - name: Checkout resolved SHA
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ steps.ct.outputs.candidate_tag_sha }}
+        fetch-depth: 0
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '24'
+        registry-url: 'https://npm.pkg.github.com'
+        scope: '@knauf-group'
+        cache: npm
+
+    - name: Install dependencies
+      run: npm ci        
+
+    - name: Build the app
+      run: npx mbt build --mtar ${{ github.event.repository.name }}.mtar
+
+    - name: Set TRQ name
+      run: |            
+        CANDIDATE_TAG_SHA="${{ steps.ct.outputs.candidate_tag_sha }}"
+        BRANCH_TYPE="${{ github.event.inputs.branch_type }}"
+        BRANCH_TYPE="${BRANCH_TYPE^}"
+
+        TRQ_NAME="${BRANCH_TYPE} ${{ github.event.repository.name }}@${{ steps.ct.outputs.candidate_tag }} by ${{ github.actor }} - sha(${CANDIDATE_TAG_SHA::7})"
+        echo "TRQ_NAME=$TRQ_NAME" >> "$GITHUB_ENV"
+        echo "::notice title=Transport Request Name::${TRQ_NAME}"             
+    
+    - name: Set CTMS node    
+      id: ctms_node
+      run: |
+        BRANCH_TYPE="${{ github.event.inputs.branch_type }}"
+        if [ "$BRANCH_TYPE" = "release" ]; then
+          NODE_NAME="BPA_CF_QAS"
+        elif [ "$BRANCH_TYPE" = "hotfix" ]; then
+          NODE_NAME="BPA_CF_PRD"
+        fi
+        echo "::notice title=CTMS node::CTMS node name ${NODE_NAME}"
+        echo "node_name=$NODE_NAME" >> "$GITHUB_OUTPUT"
+
+    - name: Upload MTAR to CTMS
+      id: ctms_upload
+      uses: miyasuta/ctms-upload-action@main
+      with:
+        mta: mta_archives/${{ github.event.repository.name }}.mtar
+        credentials: ${{ secrets.CTMS_CREDENTIALS }}
+        nodeName: ${{ steps.ctms_node.outputs.node_name }}
+        transportDescription: ${{ env.TRQ_NAME }}
+        importTransportRequest: false
+
+    - name: Show Transport Id
+      run: echo "::notice title=CTMS Transport Id::CTMS Transport Id ${{ steps.ctms_upload.outputs.requestId }} "
+
+    - name: Create CTMS metadata tag
+      env: 
+        APP_NAME: "${{ github.event.repository.name }}"
+        SOURCE_BRANCH: ${{ steps.branch.outputs.active_branch }}
+        SOURCE_SHA: ${{ steps.ct.outputs.candidate_tag_sha }}
+        SOURCE_TAG: ${{ steps.ct.outputs.candidate_tag }}
+        TRANSPORT_ID: ${{ steps.ctms_upload.outputs.requestId }}
+      run: bash .github/workflows/scripts/create_ctms_metadata_tag.sh

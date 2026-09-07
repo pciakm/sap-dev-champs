@@ -1,0 +1,116 @@
+name: Run tests
+
+on:
+  pull_request:
+    branches:
+      - dev  
+
+# env:
+#   APP_NAME: sap-dev-champs
+#   CF_API: ${{ vars.CF_API }} 
+#   CF_ORG: ${{ vars.CF_ORG }} 
+#   CF_SPACE: ${{ vars.CF_SPACE }}
+#   NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
+
+jobs:    
+  run-tests:
+    if: ${{ !startsWith(github.event.pull_request.head.ref, 'sync/') }}
+    runs-on: ubuntu-latest            
+    environment: CF_DEV
+    steps:        
+    - name: Checkout repository
+      uses: actions/checkout@v2
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v2
+      with:
+        node-version: '22'
+
+    - name: Install dependencies
+      run: npm ci
+
+    # - name: Copy VCAP_SERVICES and User-Provided Variables from CF app      
+    #   uses: citizen-of-planet-earth/cf-cli-action@master   
+    #   if: ${{ env.CF_API != '' && env.CF_ORG != '' && env.CF_SPACE != '' }}   
+    #   with:
+    #     cf_api: ${{ env.CF_API }}
+    #     cf_username: ${{ secrets.CF_USERNAME }}
+    #     cf_password: ${{ secrets.CF_PASSWORD }}
+    #     cf_org: ${{ env.CF_ORG }}
+    #     cf_space: ${{ env.CF_SPACE }}
+    #     command: |                      
+    #         curl "/v3/apps/$(cf app $APP_NAME --guid)/env" > full_env.json &&
+    #         cat full_env.json | jq '.system_env_json.VCAP_SERVICES' > vcap_services.json &&                 
+    #         cat full_env.json | jq '.environment_variables' > user_env_variables.json                
+   
+    # - name: Extract VCAP_SERVICES and User-Provided Variables to GitHub Action Environment Variables       
+    #   run: |          
+    #       VCAP_SERVICES=$(cat vcap_services.json | jq -c .)
+    #       echo "::add-mask::$VCAP_SERVICES"
+    #       echo "VCAP_SERVICES=$VCAP_SERVICES" >> $GITHUB_ENV                                 
+
+    #       # all user-defined except for system-added ones
+    #       cat user_env_variables.json | jq -r 'to_entries | map(select(.key != "DEPLOY_ATTRIBUTES")) |.[] | "\(.key)=\(.value)"' >> $GITHUB_ENV  
+    #       USER_ENV_KEYS=$(cat user_env_variables.json | jq -r 'keys | map(select(.!= "DEPLOY_ATTRIBUTES")) | join(",")')          
+    #       echo "::add-mask::$USER_ENV_KEYS"
+    #       echo "USER_ENV_KEYS=$USER_ENV_KEYS" >> $GITHUB_ENV
+    
+    # - name: Validate User-Provided Variables variables
+    #   run: |
+    #     node -e "
+    #       console.log(process.env.USER_ENV_KEYS);
+    #       const userEnvKeys = process.env.USER_ENV_KEYS.split(','); 
+    #       const missingKeys = userEnvKeys.filter(key => !process.env[key]);
+    #       if (missingKeys.length > 0){
+    #         console.log('Missing env variables: ', missingKeys.join(','));
+    #         //process.exit(1);
+    #       } else {
+    #         console.log('All user env variables are set.');
+    #       }
+    #     "
+      
+    # - name: Validate service bindings in VCAP_SERVICES
+    #   run: |                
+    #     node -e "
+    #       const srvKeys = ['xsuaa', 'objectstore', 'destination', 'connectivity'];
+    #       try {                        
+    #         const VCAP_SERVICES = JSON.parse(process.env.VCAP_SERVICES)
+    #         srvKeys.forEach(key => {                             
+    #           const srv = VCAP_SERVICES[key];
+    #           if (!srv || srv.length === 0){
+    #             console.log('Service: '+  key +' is not bound');
+    #             //process.exit(1);
+    #           }
+    #         });
+    #       } catch (error) {
+    #         console.log('Error in validating VCAP_SERVICES');
+    #       }          
+    #     "   
+    # - name: Run tests 
+    #   run: npm run test
+
+    # - name: Run Integration Tests for Object Store
+    #   run: npm run test:int-obj-store    
+        
+    # - name: Run Integration Tests for Outlook
+    #   run: npm run test:int-outlook          
+
+    # - name: Run Unit Tests for Outlook
+    #   run: npm run test:unit-outlook
+
+    # - name: Run Unit Tests for UiPath      
+    #   run: npm run test:unit-uipath      
+    
+    # - name: Run Unit Tests for Action Center      
+    #   run: npm run test:unit-actioncent
+
+    # # - name: Run Unit Tests for Action Center utils
+    # #   run: npm run test:unit-utilsactioncent
+
+    # - name: Run Unit Tests for SAP
+    #   run: npm run test:unit-sap     
+
+    # - name: Run Unit Tests for Logger
+    #   run: npm run test:unit-logger           
+
+     

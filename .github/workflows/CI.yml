@@ -1,0 +1,52 @@
+on:   
+  pull_request:
+    types:
+      - closed
+    branches:
+      - dev
+      
+permissions:
+  contents: read
+  packages: read
+
+env:
+  NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  APP_NAME: "${{ github.event.repository.name }}.mtar"
+
+jobs:      
+  build-deploy:        
+    if: ${{ github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'dev' && !startsWith(github.event.pull_request.head.ref, 'sync/') }}
+    runs-on: ubuntu-latest
+    environment: CF_DEV           
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2 
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Debug environment
+        run: |
+          node -v
+          npm -v
+          npx cds --version
+      
+      - name: Build the app         
+        run:  npx mbt build --mtar ${{ env.APP_NAME }}
+
+      - name: Deploy the app
+        uses: citizen-of-planet-earth/cf-cli-action@master 
+        with:
+          cf_api: ${{ vars.CF_API }}
+          cf_username: ${{ secrets.CF_USERNAME }}
+          cf_password: ${{ secrets.CF_PASSWORD }}
+          cf_org: ${{ vars.CF_ORG }}
+          cf_space: ${{ vars.CF_SPACE }}
+          command: |              
+            install-plugin multiapps -f &&
+            cf deploy mta_archives/${{ env.APP_NAME }} -f
