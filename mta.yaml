@@ -1,7 +1,7 @@
 _schema-version: 3.3.0
-ID: foo
+ID: sap-dev-champs
 version: 1.0.0
-description: "Node foo project"
+description: "SAP dev champs"
 parameters:
   enable-parallel-deployments: true
 build-parameters:
@@ -11,7 +11,7 @@ build-parameters:
         - npm ci
         - npx cds build --production
 modules:
-  - name: foo-srv
+  - name: sap-dev-champs-srv
     type: nodejs
     path: gen/srv
     parameters:
