@@ -20,5 +20,26 @@
   },
   "devDependencies": {
     "@sap/cds-dk": ">=8"
+  },
+  "cds": {
+    "build": {
+      "target": "gen",
+      "tasks": [
+        {
+          "for": "node-cf",
+          "src": "srv",
+          "options": {
+            "model": [
+              "db",
+              "srv",
+              "app"
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "dependencies": {
+    "@sap/cds": "^10.1.0"
   }
 }
