@@ -1,45 +1,22 @@
 {
-  "name": "foo",
+  "name": "sap-dev-champs",
   "version": "1.0.0",
-  "description": "Node foo project",
-  "homepage": "https://github.com/pciakm/node-foo#readme",
-  "bugs": {
-    "url": "https://github.com/pciakm/node-foo/issues"
+  "description": "A simple CAP project.",
+  "repository": "<Add your repository here>",
+  "license": "UNLICENSED",
+  "private": true,
+  "dependencies": {
+    "@sap/cds": "^9",
+    "express": "^4"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/pciakm/node-foo.git"
-  },
-  "license": "ISC",
-  "author": "",
-  "type": "commonjs",
-  "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node index.js"
+  "engines": {
+    "node": ">=20"
   },
   "devDependencies": {
-    "@sap/cds-dk": ">=8"
+    "@cap-js/sqlite": "^2",
+    "@cap-js/cds-types": "^0.12.0"
   },
-  "cds": {
-    "build": {
-      "target": "gen",
-      "tasks": [
-        {
-          "for": "node-cf",
-          "src": "srv",
-          "options": {
-            "model": [
-              "db",
-              "srv",
-              "app"
-            ]
-          }
-        }
-      ]
-    }
-  },
-  "dependencies": {
-    "@sap/cds": "^10.1.0"
+  "scripts": {
+    "start": "cds-serve"
   }
 }
