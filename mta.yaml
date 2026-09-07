@@ -24,7 +24,15 @@ modules:
         properties:
           srv-url: ${default-url}
     requires:
-      []
+      - name: sap-dev-champs-auth
 
 resources:
-  []
+  - name: sap-dev-champs-auth
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: xsuaa
+      service-plan: application
+      path: ./xs-security.json
+      config:
+        xsappname: sap-dev-champs-${org}-${space}
+        tenant-mode: dedicated
