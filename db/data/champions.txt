@@ -1,2 +1,8 @@
 PCIAKM
+<<<<<<< HEAD
 MARCIN_S
+=======
+MARCIN_S
+Andrzej & Marcin
+Walska
+>>>>>>> b0bbf50 (TeamA new SAP Champs List)
